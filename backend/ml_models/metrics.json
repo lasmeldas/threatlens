@@ -1,0 +1,170 @@
+{
+  "dataset": "NSL-KDD (official KDDTrain+ and KDDTest+)",
+  "trained_on": "2026-11-19",
+  "selected_model": "gradient_boosting",
+  "selection_rule": "highest F1 on a validation split of Train+ (the test set was not used to choose). Changed from ROC AUC after a first run, because two models tied at 1.0000; see ml/README.md",
+  "train_records": 125973,
+  "test_records": 22544,
+  "threshold": 0.5,
+  "validation": {
+    "logistic_regression": {
+      "accuracy": 0.9719,
+      "precision": 0.9762,
+      "recall": 0.963,
+      "f1": 0.9696,
+      "roc_auc": 0.9963,
+      "false_positive_rate": 0.0204,
+      "confusion_matrix": {
+        "true_negative": 13194,
+        "false_positive": 275,
+        "false_negative": 434,
+        "true_positive": 11292
+      }
+    },
+    "random_forest": {
+      "accuracy": 0.9988,
+      "precision": 0.9995,
+      "recall": 0.998,
+      "f1": 0.9987,
+      "roc_auc": 1.0,
+      "false_positive_rate": 0.0004,
+      "confusion_matrix": {
+        "true_negative": 13463,
+        "false_positive": 6,
+        "false_negative": 24,
+        "true_positive": 11702
+      }
+    },
+    "gradient_boosting": {
+      "accuracy": 0.9994,
+      "precision": 0.9996,
+      "recall": 0.9991,
+      "f1": 0.9993,
+      "roc_auc": 1.0,
+      "false_positive_rate": 0.0004,
+      "confusion_matrix": {
+        "true_negative": 13464,
+        "false_positive": 5,
+        "false_negative": 11,
+        "true_positive": 11715
+      }
+    }
+  },
+  "test": {
+    "logistic_regression": {
+      "accuracy": 0.7539,
+      "precision": 0.9177,
+      "recall": 0.6236,
+      "f1": 0.7426,
+      "roc_auc": 0.7917,
+      "false_positive_rate": 0.0739,
+      "confusion_matrix": {
+        "true_negative": 8993,
+        "false_positive": 718,
+        "false_negative": 4830,
+        "true_positive": 8003
+      }
+    },
+    "random_forest": {
+      "accuracy": 0.7658,
+      "precision": 0.9676,
+      "recall": 0.609,
+      "f1": 0.7475,
+      "roc_auc": 0.966,
+      "false_positive_rate": 0.027,
+      "confusion_matrix": {
+        "true_negative": 9449,
+        "false_positive": 262,
+        "false_negative": 5018,
+        "true_positive": 7815
+      }
+    },
+    "gradient_boosting": {
+      "accuracy": 0.8032,
+      "precision": 0.9693,
+      "recall": 0.6757,
+      "f1": 0.7963,
+      "roc_auc": 0.961,
+      "false_positive_rate": 0.0283,
+      "confusion_matrix": {
+        "true_negative": 9436,
+        "false_positive": 275,
+        "false_negative": 4162,
+        "true_positive": 8671
+      }
+    }
+  },
+  "selected_model_by_category": {
+    "DoS": {
+      "records": 7460,
+      "correctly_classified": 0.8712
+    },
+    "Probe": {
+      "records": 2421,
+      "correctly_classified": 0.7654
+    },
+    "R2L": {
+      "records": 2885,
+      "correctly_classified": 0.1061
+    },
+    "U2R": {
+      "records": 67,
+      "correctly_classified": 0.194
+    },
+    "normal": {
+      "records": 9711,
+      "correctly_classified": 0.9717
+    }
+  },
+  "threshold_sweep_on_test": {
+    "0.1": {
+      "recall": 0.7196,
+      "false_positive_rate": 0.0293,
+      "precision": 0.9701
+    },
+    "0.3": {
+      "recall": 0.687,
+      "false_positive_rate": 0.0287,
+      "precision": 0.9693
+    },
+    "0.5": {
+      "recall": 0.6757,
+      "false_positive_rate": 0.0283,
+      "precision": 0.9693
+    },
+    "0.7": {
+      "recall": 0.6553,
+      "false_positive_rate": 0.0279,
+      "precision": 0.9688
+    },
+    "0.9": {
+      "recall": 0.6228,
+      "false_positive_rate": 0.0271,
+      "precision": 0.9681
+    }
+  },
+  "unseen_attacks": {
+    "attack_types_never_seen_in_training": [
+      "apache2",
+      "httptunnel",
+      "mailbomb",
+      "mscan",
+      "named",
+      "processtable",
+      "ps",
+      "saint",
+      "sendmail",
+      "snmpgetattack",
+      "snmpguess",
+      "sqlattack",
+      "udpstorm",
+      "worm",
+      "xlock",
+      "xsnoop",
+      "xterm"
+    ],
+    "records_of_unseen_types": 3750,
+    "detected_unseen": 0.4061,
+    "detected_seen": 0.787
+  }
+}
