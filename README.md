@@ -9,11 +9,11 @@ A small security monitoring platform (a mini SIEM): upload logs, get ranked aler
 | Phase | What | State |
 | --- | --- | --- |
 | 1 | Django REST API, PostgreSQL, roles, audit log, rule-based detection, tests, CI, Docker | **Done** |
-| 2 | React dashboard: alert list and detail pages, charts, status changes | Planned |
+| 2 | React dashboard: sign in, overview with charts, alert list and detail pages, upload and status changes | **Done** |
 | 3 | ML detection trained on a public intrusion dataset, with a proper evaluation | Planned |
 | 4 | Live demo with sample data, screenshots, architecture write-up | Planned |
 
-Only phase 1 exists today. The rest is what I am building next.
+Phases 1 and 2 are built. Phases 3 and 4 are what I am building next.
 
 ## What phase 1 does
 
@@ -24,6 +24,14 @@ Only phase 1 exists today. The rest is what I am building next.
   - **medium**: slow username spraying that stays under the burst threshold
 - Alerts are stored, filterable, and have a status an analyst can change: `new`, `investigating`, `resolved`, `false_positive`.
 - Every upload and every status change is written to an audit log.
+
+## The dashboard
+
+- **Sign in** with a username and password. The token is kept for this browser tab only and is revoked when you sign out.
+- **Overview:** totals, alerts by severity, status and type, the most-flagged addresses, and (for analysts) a form to analyse a log.
+- **Alerts:** filter by severity, status, type and address, sort, and page through results. The filters live in the URL, so a filtered view can be shared.
+- **Alert detail:** what happened, which usernames were tried, when, and (for analysts) buttons to set the status.
+- **Roles are respected in the UI** (viewers get no upload form or status buttons), but the real check is on the server.
 
 ## Run it
 
@@ -37,11 +45,19 @@ THREATLENS_PASSWORD='a-long-passphrase-here' python manage.py create_user ana --
 python manage.py runserver
 ```
 
-With Docker and PostgreSQL:
+The dashboard in development mode (needs the API running on port 8000):
+
+```bash
+cd frontend && npm install && npm run dev      # http://localhost:5173
+```
+
+With Docker (dashboard, API and PostgreSQL):
 
 ```bash
 cp .env.example .env        # then set DJANGO_SECRET_KEY and DB_PASSWORD
-docker compose up --build
+docker compose up --build   # dashboard at http://localhost:8080
+# then create a user:
+docker compose exec -e THREATLENS_PASSWORD='a-long-passphrase' api python manage.py create_user ana --role analyst
 ```
 
 Try it:
@@ -91,7 +107,13 @@ Known limit: there is no HTTPS in the Compose file, so put it behind a TLS proxy
 cd backend && DJANGO_DEBUG=1 python manage.py test
 ```
 
-30 tests cover the API, permissions, the audit log, rate limiting, input limits, the user command, and the settings safety checks. One test checks the detection engine against **28 logs whose alerts were produced by the real authwatch**, so the two cannot drift apart unnoticed. CI runs on Python 3.11 to 3.13 with SQLite, and on PostgreSQL 16.
+30 backend tests cover the API, permissions, the audit log, rate limiting, input limits, the user command, and the settings safety checks. One test checks the detection engine against **28 logs whose alerts were produced by the real authwatch**, so the two cannot drift apart unnoticed. CI runs on Python 3.11 to 3.13 with SQLite, and on PostgreSQL 16.
+
+The dashboard has 19 tests (sign-in and session handling, API errors, the charts, filtering, paging, uploading, and role-based buttons):
+
+```bash
+cd frontend && npm test
+```
 
 ## License
 
