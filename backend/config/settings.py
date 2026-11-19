@@ -98,8 +98,11 @@ MAX_LOG_BYTES = int(os.environ.get("MAX_LOG_BYTES", 2 * 1024 * 1024))
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_LOG_BYTES + 64 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_LOG_BYTES
 
+# Login tokens stop working after this many hours.
+TOKEN_TTL_HOURS = float(os.environ.get("TOKEN_TTL_HOURS", 12))
+
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.TokenAuthentication"],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["alerts.authentication.ExpiringTokenAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["alerts.permissions.IsAnalystOrReadOnly"],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
