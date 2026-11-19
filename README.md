@@ -58,7 +58,9 @@ curl "localhost:8000/api/alerts/?ordering=severity" -H "Authorization: Token $TO
 
 | Method and path | Who | Purpose |
 | --- | --- | --- |
-| `POST /api/auth/token/` | anyone (rate limited) | username and password in, token out |
+| `POST /api/auth/token/` | anyone (rate limited) | username and password in, token and role out |
+| `POST /api/auth/logout/` | signed-in user | revoke the current token |
+| `GET /api/me/` | signed-in user | who am I and what is my role |
 | `POST /api/uploads/` | analyst | analyse a log (`log` text or `file`, plus `year`, `threshold`, `window`, `spray_users`) |
 | `GET /api/uploads/`, `/api/uploads/<id>/` | any signed-in user | past uploads |
 | `GET /api/alerts/` | any signed-in user | filter by `severity`, `status`, `kind`, `ip`, `upload`; `ordering=newest\|severity\|failures` |
@@ -79,7 +81,9 @@ Roles: **viewer** can read, **analyst** can also upload and change alert status,
 - Production defaults: secure cookies, `nosniff`, no framing.
 - The Docker image runs as a non-root user and the API port is bound to localhost only.
 
-Known limits: tokens do not expire yet (planned with the dashboard login), and there is no HTTPS in the Compose file, so put it behind a TLS proxy for anything real.
+Login tokens expire after 12 hours (`TOKEN_TTL_HOURS`), signing in again replaces the old token, and `POST /api/auth/logout/` revokes it.
+
+Known limit: there is no HTTPS in the Compose file, so put it behind a TLS proxy for anything real.
 
 ## Tests
 
@@ -87,7 +91,7 @@ Known limits: tokens do not expire yet (planned with the dashboard login), and t
 cd backend && DJANGO_DEBUG=1 python manage.py test
 ```
 
-25 tests cover the API, permissions, the audit log, rate limiting, input limits, the user command, and the settings safety checks. One test checks the detection engine against **28 logs whose alerts were produced by the real authwatch**, so the two cannot drift apart unnoticed. CI runs on Python 3.11 to 3.13 with SQLite, and on PostgreSQL 16.
+30 tests cover the API, permissions, the audit log, rate limiting, input limits, the user command, and the settings safety checks. One test checks the detection engine against **28 logs whose alerts were produced by the real authwatch**, so the two cannot drift apart unnoticed. CI runs on Python 3.11 to 3.13 with SQLite, and on PostgreSQL 16.
 
 ## License
 

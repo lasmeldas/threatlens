@@ -37,6 +37,7 @@ class AuthTests(ApiTestCase):
         ok = self.client.post("/api/auth/token/", {"username": "ana", "password": "correct-horse-battery-1"}, format="json")
         self.assertEqual(ok.status_code, 200)
         self.assertTrue(ok.data["token"])
+        self.assertEqual(ok.data["user"], {"username": "ana", "role": "analyst"})
         bad = self.client.post("/api/auth/token/", {"username": "ana", "password": "nope"}, format="json")
         self.assertEqual(bad.status_code, 400)
 
@@ -164,3 +165,57 @@ class AuditTests(ApiTestCase):
         self.assertEqual(self.client.get("/api/audit/").status_code, 403)
         self.login_as(make_user("root1", superuser=True))
         self.assertEqual(self.client.get("/api/audit/").status_code, 200)
+
+
+class SessionTests(ApiTestCase):
+    def sign_in(self, name="ana"):
+        response = self.client.post("/api/auth/token/", {"username": name, "password": "correct-horse-battery-1"}, format="json")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {response.data['token']}")
+        return response.data["token"]
+
+    def test_me_reports_the_role(self):
+        for name, role, admin in [("ana", "analyst", False), ("vic", "viewer", False), ("boss", None, True)]:
+            make_user(name, role, superuser=admin)
+        expected = {"ana": "analyst", "vic": "viewer", "boss": "admin"}
+        for name, role in expected.items():
+            self.sign_in(name)
+            self.assertEqual(self.client.get("/api/me/").data, {"username": name, "role": role})
+
+    def test_signing_in_again_replaces_the_old_token(self):
+        make_user("ana", "analyst")
+        first = self.sign_in()
+        second = self.sign_in()
+        self.assertNotEqual(first, second)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {first}")
+        self.assertEqual(self.client.get("/api/me/").status_code, 401)
+
+    def test_logout_revokes_the_token(self):
+        make_user("ana", "analyst")
+        token = self.sign_in()
+        self.assertEqual(self.client.post("/api/auth/logout/").status_code, 204)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        self.assertEqual(self.client.get("/api/me/").status_code, 401)
+
+    def test_expired_tokens_are_refused_and_deleted(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        make_user("ana", "analyst")
+        token = self.sign_in()
+        Token.objects.filter(key=token).update(created=timezone.now() - timedelta(hours=13))
+        response = self.client.get("/api/me/")
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("expired", str(response.data["detail"]))
+        self.assertFalse(Token.objects.filter(key=token).exists())
+
+    @override_settings(TOKEN_TTL_HOURS=1)
+    def test_the_lifetime_is_configurable(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        make_user("ana", "analyst")
+        token = self.sign_in()
+        Token.objects.filter(key=token).update(created=timezone.now() - timedelta(hours=2))
+        self.assertEqual(self.client.get("/api/me/").status_code, 401)

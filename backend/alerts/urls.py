@@ -10,6 +10,8 @@ router.register("audit", views.AuditViewSet, basename="audit")
 
 urlpatterns = [
     path("auth/token/", views.LoginView.as_view(), name="login"),
+    path("auth/logout/", views.LogoutView.as_view(), name="logout"),
+    path("me/", views.MeView.as_view(), name="me"),
     path("stats/", views.StatsView.as_view(), name="stats"),
     path("", include(router.urls)),
 ]

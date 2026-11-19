@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
+from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
@@ -15,7 +16,7 @@ from rest_framework.views import APIView
 from detection import detect, parse_lines
 
 from .models import Alert, AuditEntry, Upload
-from .permissions import IsAdmin
+from .permissions import IsAdmin, is_analyst
 from .serializers import AlertSerializer, AuditEntrySerializer, UploadRequestSerializer, UploadSerializer
 
 
@@ -29,6 +30,32 @@ class LoginView(ObtainAuthToken):
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]  # ObtainAuthToken switches throttling off by default
     throttle_scope = "login"
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.serializer_class(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+        Token.objects.filter(user=user).delete()  # every sign-in gets a fresh token with a fresh expiry
+        token = Token.objects.create(user=user)
+        return Response({"token": token.key, "user": describe_user(user)})
+
+
+def describe_user(user):
+    role = "admin" if user.is_superuser else "analyst" if is_analyst(user) else "viewer"
+    return {"username": user.get_username(), "role": role}
+
+
+class LogoutView(APIView):
+    """Throw away the caller's token."""
+
+    def post(self, request):
+        Token.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MeView(APIView):
+    def get(self, request):
+        return Response(describe_user(request.user))
 
 
 class UploadViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
