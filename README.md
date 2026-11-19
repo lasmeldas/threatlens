@@ -10,10 +10,11 @@ A small security monitoring platform (a mini SIEM): upload logs, get ranked aler
 | --- | --- | --- |
 | 1 | Django REST API, PostgreSQL, roles, audit log, rule-based detection, tests, CI, Docker | **Done** |
 | 2 | React dashboard: sign in, overview with charts, alert list and detail pages, upload and status changes | **Done** |
-| 3 | ML detection trained on a public intrusion dataset, with a proper evaluation | Planned |
+| 3a | ML model for network attack detection, trained and evaluated on NSL-KDD ([`ml/`](ml/README.md)) | **Done** |
+| 3b | Score uploaded connection records through the API and show them in the dashboard | Planned |
 | 4 | Live demo with sample data, screenshots, architecture write-up | Planned |
 
-Phases 1 and 2 are built. Phases 3 and 4 are what I am building next.
+Phases 1, 2 and 3a are built. 3b and 4 are what I am building next.
 
 ## What phase 1 does
 
