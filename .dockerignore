@@ -1,0 +1,7 @@
+.git
+ml/data
+frontend/node_modules
+frontend/dist
+**/__pycache__
+**/*.sqlite3
+.env

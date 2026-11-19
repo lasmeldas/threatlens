@@ -10,6 +10,12 @@ describe('BarChart', () => {
     expect(screen.getByTestId('bar-medium')).toHaveStyle({ width: '0%' });
   });
 
+  it('can scale to a fixed maximum such as 100 percent', () => {
+    render(<BarChart title="Percent" scaleMax={100} data={[{ label: 'a', value: 40 }, { label: 'b', value: 10 }]} />);
+    expect(screen.getByTestId('bar-a')).toHaveStyle({ width: '40%' });
+    expect(screen.getByTestId('bar-b')).toHaveStyle({ width: '10%' });
+  });
+
   it('says so when there is nothing to draw', () => {
     render(<BarChart title="By status" data={[]} empty="Nothing here." />);
     expect(screen.getByText('Nothing here.')).toBeInTheDocument();

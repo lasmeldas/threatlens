@@ -1,10 +1,11 @@
-/** Horizontal bars drawn as plain HTML. `data` is [{label, value, color?}]. Bar width is relative to the largest value. */
-export default function BarChart({ title, data, empty = 'No data yet.' }) {
-  const max = Math.max(0, ...data.map((d) => d.value));
+/** Horizontal bars drawn as plain HTML. `data` is [{label, value, color?}]. Bars are scaled to the largest value, or to `scaleMax` when given (use 100 for percentages). */
+export default function BarChart({ title, data, empty = 'No data yet.', scaleMax }) {
+  const largest = Math.max(0, ...data.map((d) => d.value));
+  const max = scaleMax || largest;
   return (
     <figure className="chart">
       <figcaption>{title}</figcaption>
-      {max === 0 ? <p className="muted">{empty}</p> : (
+      {largest === 0 ? <p className="muted">{empty}</p> : (
         <ul>
           {data.map((d) => (
             <li key={d.label}>

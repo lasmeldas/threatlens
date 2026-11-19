@@ -3,6 +3,7 @@ import { useAuth } from './auth.jsx';
 import AlertDetail from './pages/AlertDetail.jsx';
 import Alerts from './pages/Alerts.jsx';
 import Login from './pages/Login.jsx';
+import Model from './pages/Model.jsx';
 import Overview from './pages/Overview.jsx';
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
         <nav aria-label="Main">
           <NavLink to="/" end>Overview</NavLink>
           <NavLink to="/alerts">Alerts</NavLink>
+          <NavLink to="/model">Model</NavLink>
         </nav>
         <div className="who">
           <span>{user.username} <small className="role">{user.role}</small></span>
@@ -27,6 +29,7 @@ export default function App() {
           <Route path="/" element={<Overview />} />
           <Route path="/alerts" element={<Alerts />} />
           <Route path="/alerts/:id" element={<AlertDetail />} />
+          <Route path="/model" element={<Model />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

@@ -5,7 +5,10 @@ from django.db import models
 class Upload(models.Model):
     """One log that an analyst submitted, with the settings used to analyse it."""
 
+    KINDS = [("ssh_log", "SSH auth log"), ("connections", "Network connection records")]
+
     name = models.CharField(max_length=200)
+    kind = models.CharField(max_length=20, choices=KINDS, default="ssh_log")
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="uploads")
     created_at = models.DateTimeField(auto_now_add=True)
     year = models.PositiveSmallIntegerField()
@@ -30,8 +33,13 @@ class Alert(models.Model):
     upload = models.ForeignKey(Upload, on_delete=models.CASCADE, related_name="alerts")
     severity = models.CharField(max_length=10, choices=SEVERITIES)
     kind = models.CharField(max_length=40)
-    ip = models.CharField(max_length=45)
-    failures = models.PositiveIntegerField()
+    # "rules" alerts come from the SSH detection rules, "ml" alerts from the network-attack model.
+    source = models.CharField(max_length=10, default="rules")
+    # How likely the model thinks the record is an attack (0 to 1). Empty for rule alerts.
+    score = models.FloatField(null=True, blank=True)
+    # Connection records in NSL-KDD carry no addresses, so ML alerts have an empty ip.
+    ip = models.CharField(max_length=45, blank=True, default="")
+    failures = models.PositiveIntegerField(default=0)
     users = models.JSONField(default=list)
     first_seen = models.DateTimeField()
     last_seen = models.DateTimeField()
