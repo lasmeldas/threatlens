@@ -7,3 +7,4 @@ staticfiles/
 venv/
 node_modules/
 dist/
+ml/data/
