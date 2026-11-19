@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import SeverityBadge from '../components/SeverityBadge.jsx';
-import { STATUSES, fmt, statusLabel } from './Alerts.jsx';
+import { STATUSES, fmt, kindLabel, statusLabel } from './Alerts.jsx';
 
 export default function AlertDetail() {
   const { id } = useParams();
@@ -23,13 +23,22 @@ export default function AlertDetail() {
   return (
     <>
       <p><Link to="/alerts">&larr; All alerts</Link></p>
-      <h1><SeverityBadge severity={alert.severity} /> {alert.kind.replace(/_/g, ' ')}</h1>
+      <h1><SeverityBadge severity={alert.severity} /> {kindLabel(alert.kind)}</h1>
       <section className="card">
         <p>{alert.detail}</p>
         <dl className="facts">
-          <div><dt>Address</dt><dd className="mono"><Link to={`/alerts?ip=${encodeURIComponent(alert.ip)}`}>{alert.ip}</Link></dd></div>
-          <div><dt>Failures</dt><dd>{alert.failures}</dd></div>
-          <div><dt>Usernames tried</dt><dd className="mono">{alert.users.join(', ')}</dd></div>
+          {alert.source === 'ml' ? (
+            <>
+              <div><dt>Found by</dt><dd>The ML model (see the Model page)</dd></div>
+              <div><dt>Attack chance</dt><dd data-testid="score">{Math.round(alert.score * 100)}%</dd></div>
+            </>
+          ) : (
+            <>
+              <div><dt>Address</dt><dd className="mono"><Link to={`/alerts?ip=${encodeURIComponent(alert.ip)}`}>{alert.ip}</Link></dd></div>
+              <div><dt>Failures</dt><dd>{alert.failures}</dd></div>
+              <div><dt>Usernames tried</dt><dd className="mono">{alert.users.join(', ')}</dd></div>
+            </>
+          )}
           <div><dt>First seen</dt><dd>{fmt(alert.first_seen)}</dd></div>
           <div><dt>Last seen</dt><dd>{fmt(alert.last_seen)}</dd></div>
           <div><dt>Status</dt><dd data-testid="status">{statusLabel(alert.status)}</dd></div>

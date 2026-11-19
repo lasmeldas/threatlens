@@ -58,7 +58,7 @@ describe('overview', () => {
     expect(within(totals).getByText('3')).toBeInTheDocument();
     expect(screen.getByText('By severity')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '203.0.113.45' })).toHaveAttribute('href', '/alerts?ip=203.0.113.45');
-    expect(screen.queryByRole('form', { name: 'Analyse a log' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: 'Analyse data' })).not.toBeInTheDocument();
     expect(screen.getByText(/read-only/)).toBeInTheDocument();
   });
 
@@ -139,5 +139,76 @@ describe('alert detail', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Resolved' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('do not have permission');
     expect(screen.getByTestId('status')).toHaveTextContent('New');
+  });
+});
+
+describe('machine-learning features', () => {
+  const analyst = { 'GET /api/me/': { body: { username: 'ana', role: 'analyst' } }, 'GET /api/stats/': { body: stats } };
+
+  it('scores connection records and reports the result', async () => {
+    tokenStore.set('t');
+    const calls = mockApi({
+      ...analyst,
+      'POST /api/connections/': { status: 201, body: { records: 60, flagged: 14, alerts_created: 14, against_labels: { records: 60, agreed: 44, attacks_missed: 16, false_alarms: 0 } } },
+    });
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('tab', { name: /Network connections/ }));
+    await userEvent.type(screen.getByLabelText(/Paste connection records/), '0,tcp,http');
+    await userEvent.click(screen.getByRole('button', { name: 'Analyse' }));
+    const status = await screen.findByRole('status');
+    expect(status).toHaveTextContent('Scored 60 connection records: 14 flagged as likely attacks, 14 alerts raised.');
+    expect(status).toHaveTextContent('44 of 60 agree, 16 attacks missed, 0 false alarms');
+    const sent = calls.find((c) => c.key === 'POST /api/connections/').body;
+    expect(sent.get('csv')).toBe('0,tcp,http');
+    expect(sent.get('threshold')).toBe('0.5');
+  });
+
+  it('shows the server message when records are malformed', async () => {
+    tokenStore.set('t');
+    mockApi({ ...analyst, 'POST /api/connections/': { status: 400, body: { detail: 'Each record needs 41 values (or 43 with the label and difficulty columns at the end); found 3.' } } });
+    renderApp(<App />);
+    await userEvent.click(await screen.findByRole('tab', { name: /Network connections/ }));
+    await userEvent.type(screen.getByLabelText(/Paste connection records/), '1,2,3');
+    await userEvent.click(screen.getByRole('button', { name: 'Analyse' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('41 values');
+  });
+
+  it('lists ML alerts with their score instead of an address', async () => {
+    tokenStore.set('t');
+    mockApi({ 'GET /api/me/': { body: { username: 'ana', role: 'analyst' } }, 'GET /api/alerts/': { body: page([alertFixture({ id: 9, severity: 'high', kind: 'network_attack', source: 'ml', score: 0.97, ip: '', failures: 0, users: [] })]) } });
+    renderApp(<App />, { path: '/alerts' });
+    expect(await screen.findByText('97% attack chance')).toBeInTheDocument();
+    expect(screen.getByText('network attack (ML)')).toBeInTheDocument();
+    expect(screen.getByText('n/a')).toBeInTheDocument();
+  });
+
+  it('shows the score and the model note on an ML alert, with no address facts', async () => {
+    tokenStore.set('t');
+    mockApi({ 'GET /api/me/': { body: { username: 'ana', role: 'analyst' } }, 'GET /api/alerts/9/': { body: alertFixture({ id: 9, severity: 'high', kind: 'network_attack', source: 'ml', score: 0.97, ip: '', failures: 0, users: [], detail: 'Record 3: the model gives a 97% chance this is an attack.' }) } });
+    renderApp(<App />, { path: '/alerts/9' });
+    expect(await screen.findByTestId('score')).toHaveTextContent('97%');
+    expect(screen.queryByText('Usernames tried')).not.toBeInTheDocument();
+  });
+
+  it('shows the model page with the weak spots, not just the headline', async () => {
+    tokenStore.set('t');
+    mockApi({
+      'GET /api/me/': { body: { username: 'vic', role: 'viewer' } },
+      'GET /api/ml/model/': { body: {
+        dataset: 'NSL-KDD', selected_model: 'gradient_boosting', train_records: 125973, test_records: 22544,
+        test: { accuracy: 0.8032, precision: 0.9693, recall: 0.6757, false_positive_rate: 0.0283 },
+        compared_on_test: { gradient_boosting: { accuracy: 0.8032, precision: 0.9693, recall: 0.6757, false_positive_rate: 0.0283 }, logistic_regression: { accuracy: 0.7539, precision: 0.9177, recall: 0.6236, false_positive_rate: 0.0739 } },
+        by_category: { normal: { correctly_classified: 0.9717 }, R2L: { correctly_classified: 0.1061 } },
+        unseen_attacks: { records_of_unseen_types: 3750, detected_unseen: 0.4061, detected_seen: 0.787 },
+      } },
+    });
+    renderApp(<App />, { path: '/model' });
+    const results = await screen.findByRole('region', { name: 'Test results' });
+    expect(within(results).getByText('80.3%')).toBeInTheDocument();
+    expect(within(results).getByText('67.6%')).toBeInTheDocument();
+    expect(screen.getByText('40.6%')).toBeInTheDocument();
+    expect(screen.getByTestId('bar-R2L (e.g. password guessing)')).toHaveStyle({ width: '11%' });
+    expect(screen.getByText(/misses about a third of attacks/)).toBeInTheDocument();
+    expect(screen.getByText('Gradient boosting (used here)')).toBeInTheDocument();
   });
 });

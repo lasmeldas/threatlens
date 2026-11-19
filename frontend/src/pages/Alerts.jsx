@@ -7,7 +7,9 @@ export const STATUSES = [['new', 'New'], ['investigating', 'Investigating'], ['r
 export const statusLabel = (s) => (STATUSES.find(([v]) => v === s) || [s, s])[1];
 export const fmt = (iso) => new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 
-const FILTERS = ['severity', 'status', 'kind', 'ip', 'ordering', 'page'];
+const FILTERS = ['severity', 'status', 'kind', 'source', 'ip', 'ordering', 'page'];
+const KIND_LABELS = { success_after_failures: 'success after failures', brute_force: 'brute force', username_spray: 'username spray', network_attack: 'network attack (ML)' };
+export const kindLabel = (k) => KIND_LABELS[k] || k.replace(/_/g, ' ');
 
 export default function Alerts() {
   const [params, setParams] = useSearchParams();
@@ -47,7 +49,7 @@ export default function Alerts() {
         </label>
         <label>Type
           <select value={query.kind} onChange={(e) => change('kind', e.target.value)}>
-            <option value="">All</option><option value="success_after_failures">Success after failures</option><option value="brute_force">Brute force</option><option value="username_spray">Username spray</option>
+            <option value="">All</option><option value="success_after_failures">Success after failures</option><option value="brute_force">Brute force</option><option value="username_spray">Username spray</option><option value="network_attack">Network attack (ML)</option>
           </select>
         </label>
         <label>IP address <input value={query.ip} onChange={(e) => change('ip', e.target.value.trim())} placeholder="203.0.113.45" /></label>
@@ -62,14 +64,14 @@ export default function Alerts() {
       {data && (data.results.length === 0 ? <p className="muted">No alerts match these filters.</p> : (
         <div className="tablewrap">
           <table>
-            <thead><tr><th>Severity</th><th>Type</th><th>Address</th><th>Failures</th><th>Last seen</th><th>Status</th></tr></thead>
+            <thead><tr><th>Severity</th><th>Type</th><th>Address</th><th>Evidence</th><th>Last seen</th><th>Status</th></tr></thead>
             <tbody>
               {data.results.map((a) => (
                 <tr key={a.id}>
                   <td><SeverityBadge severity={a.severity} /></td>
-                  <td><Link to={`/alerts/${a.id}`}>{a.kind.replace(/_/g, ' ')}</Link></td>
-                  <td className="mono">{a.ip}</td>
-                  <td>{a.failures}</td>
+                  <td><Link to={`/alerts/${a.id}`}>{kindLabel(a.kind)}</Link></td>
+                  <td className="mono">{a.ip || 'n/a'}</td>
+                  <td>{a.score != null ? `${Math.round(a.score * 100)}% attack chance` : `${a.failures} failures`}</td>
                   <td>{fmt(a.last_seen)}</td>
                   <td>{statusLabel(a.status)}</td>
                 </tr>

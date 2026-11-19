@@ -7,7 +7,7 @@ import UploadPanel from '../components/UploadPanel.jsx';
 
 export const SEVERITY_COLORS = { critical: '#ff4d6d', high: '#ffb86b', medium: '#38bdf8' };
 const STATUS_LABELS = { new: 'New', investigating: 'Investigating', resolved: 'Resolved', false_positive: 'False positive' };
-const KIND_LABELS = { success_after_failures: 'Success after failures', brute_force: 'Brute force', username_spray: 'Username spray' };
+const KIND_LABELS = { success_after_failures: 'Success after failures', brute_force: 'Brute force', username_spray: 'Username spray', network_attack: 'Network attack (ML)' };
 
 export default function Overview() {
   const { canEdit } = useAuth();
