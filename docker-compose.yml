@@ -1,4 +1,4 @@
-# One command to run the API with PostgreSQL:   cp .env.example .env   (edit it)   then   docker compose up --build
+# One command to run the dashboard, the API and PostgreSQL (open http://localhost:8080):   cp .env.example .env   (edit it)   then   docker compose up --build
 services:
   db:
     image: postgres:16-alpine
@@ -28,8 +28,15 @@ services:
       DB_NAME: threatlens
       DB_USER: threatlens
       DB_PASSWORD: ${DB_PASSWORD}
+    expose:
+      - "8000"
+
+  web:
+    build: ./frontend
+    depends_on:
+      - api
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8080:80"
 
 volumes:
   dbdata:
