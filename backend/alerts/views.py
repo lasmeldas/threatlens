@@ -8,6 +8,7 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -17,7 +18,8 @@ from detection import detect, parse_lines
 
 from .models import Alert, AuditEntry, Upload
 from .permissions import IsAdmin, is_analyst
-from .serializers import AlertSerializer, AuditEntrySerializer, UploadRequestSerializer, UploadSerializer
+from . import scoring
+from .serializers import AlertSerializer, AuditEntrySerializer, ConnectionsRequestSerializer, UploadRequestSerializer, UploadSerializer
 
 
 def audit(actor, action, target, **detail):
@@ -93,6 +95,70 @@ class UploadViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.Retri
         return Response(UploadSerializer(upload).data, status=status.HTTP_201_CREATED)
 
 
+class ConnectionsView(APIView):
+    """Score network connection records (NSL-KDD format) with the attack model and raise alerts for likely attacks."""
+
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+    throttle_scope = "upload"
+
+    def get_throttles(self):
+        return super().get_throttles() if self.request.method == "POST" else []
+
+    def post(self, request):
+        form = ConnectionsRequestSerializer(data=request.data)
+        form.is_valid(raise_exception=True)
+        data = form.validated_data
+        try:
+            frame, labels = scoring.parse_records(data["text"])
+            probabilities = scoring.score(frame)
+        except scoring.RecordError as error:
+            raise ValidationError({"detail": str(error)}) from None
+        except FileNotFoundError:
+            return Response({"detail": "The attack model is not installed on this server."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        flagged = [i for i, p in enumerate(probabilities) if p >= data["threshold"]]
+        flagged.sort(key=lambda i: (-probabilities[i], i))
+        shown = flagged[: data["max_alerts"]]
+        now = timezone.now()
+        with transaction.atomic():
+            upload = Upload.objects.create(
+                name=data["name"], kind="connections", uploaded_by=request.user, year=now.year, threshold=1, window=1, spray_users=1,
+                events=len(frame),
+            )
+            Alert.objects.bulk_create(
+                Alert(
+                    upload=upload, source="ml", kind="network_attack", severity="high" if probabilities[i] >= 0.9 else "medium",
+                    score=round(float(probabilities[i]), 4), first_seen=now, last_seen=now,
+                    detail=(
+                        f"Record {i + 1}: the model gives a {probabilities[i]:.0%} chance this is an attack "
+                        f"({frame['protocol_type'].iloc[i]}, service {frame['service'].iloc[i]}, flag {frame['flag'].iloc[i]}). "
+                        "Connection records carry no IP address, so match it to your own logs by row number."
+                    ),
+                )
+                for i in shown
+            )
+            audit(request.user, "connections.score", upload, records=len(frame), flagged=len(flagged), alerts=len(shown))
+        result = {
+            "upload": UploadSerializer(upload).data, "records": len(frame), "flagged": len(flagged), "alerts_created": len(shown),
+            "threshold": data["threshold"],
+        }
+        if labels is not None:
+            actual = (labels != "normal").to_numpy()
+            predicted = probabilities >= data["threshold"]
+            result["against_labels"] = {"records": len(frame), "agreed": int((actual == predicted).sum()), "attacks_missed": int((actual & ~predicted).sum()), "false_alarms": int((~actual & predicted).sum())}
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class ModelView(APIView):
+    """What the model was trained on and how it scored, for the dashboard's Model page."""
+
+    def get(self, request):
+        try:
+            return Response(scoring.model_summary())
+        except (FileNotFoundError, KeyError):
+            return Response({"detail": "The attack model is not installed on this server."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
 class AlertViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin, viewsets.GenericViewSet):
     """List and read alerts. The only thing that can be changed is an alert's status."""
 
@@ -105,7 +171,7 @@ class AlertViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
 
         qs = Alert.objects.all()
         params = self.request.query_params
-        for field in ("severity", "status", "kind", "ip", "upload"):
+        for field in ("severity", "status", "kind", "source", "ip", "upload"):
             if params.get(field):
                 qs = qs.filter(**{field: params[field]})
         order = self.ORDERINGS.get(params.get("ordering", "newest"), self.ORDERINGS["newest"])
@@ -124,7 +190,7 @@ class StatsView(APIView):
     def get(self, request):
         alerts = Alert.objects.all()
         by = lambda field: dict(alerts.values_list(field).annotate(n=Count("id")).order_by())
-        top_ips = Counter({row["ip"]: row["total"] for row in alerts.values("ip").annotate(total=Count("id")).order_by("-total", "ip")[:5]})
+        top_ips = Counter({row["ip"]: row["total"] for row in alerts.exclude(ip="").values("ip").annotate(total=Count("id")).order_by("-total", "ip")[:5]})
         return Response(
             {
                 "alerts": alerts.count(),
@@ -132,6 +198,7 @@ class StatsView(APIView):
                 "by_severity": by("severity"),
                 "by_status": by("status"),
                 "by_kind": by("kind"),
+                "by_source": by("source"),
                 "top_ips": [{"ip": ip, "alerts": n} for ip, n in top_ips.most_common()],
                 "uploads": Upload.objects.count(),
             }

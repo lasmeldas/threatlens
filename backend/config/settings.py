@@ -98,6 +98,11 @@ MAX_LOG_BYTES = int(os.environ.get("MAX_LOG_BYTES", 2 * 1024 * 1024))
 DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_LOG_BYTES + 64 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_LOG_BYTES
 
+# The trained network-attack model (see ../ml). In Docker the files are copied to /app/ml_models.
+ML_MODEL_DIR = Path(os.environ.get("ML_MODEL_DIR", str(BASE_DIR.parent / "ml" / "models")))
+# Most connection records accepted in one upload.
+MAX_CONNECTION_RECORDS = int(os.environ.get("MAX_CONNECTION_RECORDS", 20000))
+
 # Login tokens stop working after this many hours.
 TOKEN_TTL_HOURS = float(os.environ.get("TOKEN_TTL_HOURS", 12))
 
