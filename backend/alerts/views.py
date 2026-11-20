@@ -1,9 +1,6 @@
 from collections import Counter
-from datetime import timezone as dt_timezone
 
-from django.db import transaction
 from django.db.models import Count
-from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -14,16 +11,10 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from detection import detect, parse_lines
-
 from .models import Alert, AuditEntry, Upload
 from .permissions import IsAdmin, is_analyst
-from . import scoring
+from . import scoring, services
 from .serializers import AlertSerializer, AuditEntrySerializer, ConnectionsRequestSerializer, UploadRequestSerializer, UploadSerializer
-
-
-def audit(actor, action, target, **detail):
-    AuditEntry.objects.create(actor=actor, action=action, target_type=target.__class__.__name__.lower(), target_id=target.pk, detail=detail)
 
 
 class LoginView(ObtainAuthToken):
@@ -74,24 +65,10 @@ class UploadViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, mixins.Retri
         form = UploadRequestSerializer(data=request.data)
         form.is_valid(raise_exception=True)
         data = form.validated_data
-        year = data.get("year") or timezone.now().year
-        events = list(parse_lines(data["text"].splitlines(True), year))
-        found = detect(events, threshold=data["threshold"], window=data["window"], spray_users=data["spray_users"])
-        failed = sum(1 for e in events if e.kind == "failed")
-        utc = dt_timezone.utc
-        with transaction.atomic():
-            upload = Upload.objects.create(
-                name=data["name"], uploaded_by=request.user, year=year, threshold=data["threshold"], window=data["window"],
-                spray_users=data["spray_users"], events=len(events), failed=failed, accepted=len(events) - failed,
-            )
-            Alert.objects.bulk_create(
-                Alert(
-                    upload=upload, severity=a.severity, kind=a.kind, ip=a.ip, failures=a.failures, users=a.users,
-                    first_seen=a.first_seen.replace(tzinfo=utc), last_seen=a.last_seen.replace(tzinfo=utc), detail=a.detail,
-                )
-                for a in found
-            )
-            audit(request.user, "upload.create", upload, events=len(events), alerts=len(found))
+        upload = services.analyze_ssh_log(
+            request.user, name=data["name"], text=data["text"], year=data.get("year"), threshold=data["threshold"],
+            window=data["window"], spray_users=data["spray_users"],
+        )
         return Response(UploadSerializer(upload).data, status=status.HTTP_201_CREATED)
 
 
@@ -109,43 +86,12 @@ class ConnectionsView(APIView):
         form.is_valid(raise_exception=True)
         data = form.validated_data
         try:
-            frame, labels = scoring.parse_records(data["text"])
-            probabilities = scoring.score(frame)
+            result = services.analyze_connections(request.user, name=data["name"], text=data["text"], threshold=data["threshold"], max_alerts=data["max_alerts"])
         except scoring.RecordError as error:
             raise ValidationError({"detail": str(error)}) from None
         except FileNotFoundError:
             return Response({"detail": "The attack model is not installed on this server."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        flagged = [i for i, p in enumerate(probabilities) if p >= data["threshold"]]
-        flagged.sort(key=lambda i: (-probabilities[i], i))
-        shown = flagged[: data["max_alerts"]]
-        now = timezone.now()
-        with transaction.atomic():
-            upload = Upload.objects.create(
-                name=data["name"], kind="connections", uploaded_by=request.user, year=now.year, threshold=1, window=1, spray_users=1,
-                events=len(frame),
-            )
-            Alert.objects.bulk_create(
-                Alert(
-                    upload=upload, source="ml", kind="network_attack", severity="high" if probabilities[i] >= 0.9 else "medium",
-                    score=round(float(probabilities[i]), 4), first_seen=now, last_seen=now,
-                    detail=(
-                        f"Record {i + 1}: the model gives a {probabilities[i]:.0%} chance this is an attack "
-                        f"({frame['protocol_type'].iloc[i]}, service {frame['service'].iloc[i]}, flag {frame['flag'].iloc[i]}). "
-                        "Connection records carry no IP address, so match it to your own logs by row number."
-                    ),
-                )
-                for i in shown
-            )
-            audit(request.user, "connections.score", upload, records=len(frame), flagged=len(flagged), alerts=len(shown))
-        result = {
-            "upload": UploadSerializer(upload).data, "records": len(frame), "flagged": len(flagged), "alerts_created": len(shown),
-            "threshold": data["threshold"],
-        }
-        if labels is not None:
-            actual = (labels != "normal").to_numpy()
-            predicted = probabilities >= data["threshold"]
-            result["against_labels"] = {"records": len(frame), "agreed": int((actual == predicted).sum()), "attacks_missed": int((actual & ~predicted).sum()), "false_alarms": int((~actual & predicted).sum())}
+        result["upload"] = UploadSerializer(result["upload"]).data
         return Response(result, status=status.HTTP_201_CREATED)
 
 
@@ -183,7 +129,7 @@ class AlertViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Upda
         before = serializer.instance.status
         alert = serializer.save()
         if alert.status != before:
-            audit(self.request.user, "alert.status", alert, old=before, new=alert.status)
+            services.audit(self.request.user, "alert.status", alert, old=before, new=alert.status)
 
 
 class StatsView(APIView):
