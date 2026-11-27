@@ -5,6 +5,8 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
+from config.middleware import revalidate_index
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -21,7 +23,10 @@ if not SECRET_KEY:
         raise ImproperlyConfigured("Set DJANGO_SECRET_KEY (or DJANGO_DEBUG=1 for local development).")
     SECRET_KEY = "dev-only-insecure-key-do-not-use-in-production"
 
-ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+# Render sets this to the service's public hostname.
+if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+    ALLOWED_HOSTS.append(os.environ["RENDER_EXTERNAL_HOSTNAME"])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -37,6 +42,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "config.middleware.SecurityHeadersMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -91,6 +98,13 @@ USE_I18N = False
 USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# The built React dashboard. When this folder exists the API serves it too, so one service runs the whole app.
+FRONTEND_DIST = Path(os.environ.get("FRONTEND_DIST", str(BASE_DIR.parent / "frontend" / "dist")))
+if (FRONTEND_DIST / "index.html").is_file():
+    WHITENOISE_ROOT = FRONTEND_DIST
+    WHITENOISE_INDEX_FILE = True
+    WHITENOISE_ADD_HEADERS_FUNCTION = revalidate_index
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Largest log accepted in one upload.
@@ -125,3 +139,9 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
+    # Behind a TLS-terminating proxy (Render, nginx) the app sees plain HTTP. Trust the proxy's header only when told to.
+    if env_bool("DJANGO_BEHIND_PROXY", False):
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+        SECURE_SSL_REDIRECT = True
+        SECURE_REDIRECT_EXEMPT = [r"^healthz$"]
+        SECURE_HSTS_SECONDS = 31536000

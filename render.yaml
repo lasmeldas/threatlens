@@ -1,0 +1,41 @@
+# Render Blueprint: one web service (dashboard + API in one image) and a PostgreSQL database.
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repository. See README, "Deploy".
+services:
+  - type: web
+    name: threatlens
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_BEHIND_PROXY
+        value: "true"
+      - key: DB_HOST
+        fromDatabase: { name: threatlens-db, property: host }
+      - key: DB_PORT
+        fromDatabase: { name: threatlens-db, property: port }
+      - key: DB_NAME
+        fromDatabase: { name: threatlens-db, property: database }
+      - key: DB_USER
+        fromDatabase: { name: threatlens-db, property: user }
+      - key: DB_PASSWORD
+        fromDatabase: { name: threatlens-db, property: password }
+      # First sign-in. Read the generated passwords under the service's Environment tab.
+      - key: THREATLENS_ADMIN_USER
+        value: analyst
+      - key: THREATLENS_ADMIN_PASSWORD
+        generateValue: true
+      - key: THREATLENS_VIEWER_USER
+        value: viewer
+      - key: THREATLENS_VIEWER_PASSWORD
+        generateValue: true
+      - key: THREATLENS_SEED_DEMO
+        value: "true"
+
+databases:
+  - name: threatlens-db
+    plan: free
+    databaseName: threatlens
+    user: threatlens

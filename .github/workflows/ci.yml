@@ -87,3 +87,25 @@ jobs:
       - run: python -m pytest -q tests
         env:
           NSLKDD_DOWNLOAD: "1"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the single-service image
+        run: docker build -t threatlens .
+      - name: Start it and check the health endpoint, the dashboard and the API
+        run: |
+          docker run -d --name tl -p 10000:10000 \
+            -e DJANGO_SECRET_KEY=ci-only-secret-key-for-smoke-test-0123456789 \
+            -e DJANGO_SECURE_COOKIES=false \
+            -e THREATLENS_ADMIN_USER=analyst -e THREATLENS_ADMIN_PASSWORD=ci-smoke-test-passphrase-1 \
+            -e THREATLENS_SEED_DEMO=true threatlens
+          for i in $(seq 1 30); do curl -sf localhost:10000/healthz && break; sleep 2; done
+          curl -sf localhost:10000/healthz
+          curl -sf localhost:10000/alerts/1 | grep -q "<title>ThreatLens</title>"
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:10000/api/alerts/)" = 401
+          TOKEN=$(curl -sf -H 'Content-Type: application/json' -d '{"username":"analyst","password":"ci-smoke-test-passphrase-1"}' localhost:10000/api/auth/token/ | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+          curl -sf -H "Authorization: Token $TOKEN" localhost:10000/api/alerts/ | python3 -c 'import sys,json;d=json.load(sys.stdin);assert d["count"]>0,d'
+      - if: failure()
+        run: docker logs tl
